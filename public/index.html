@@ -139,6 +139,55 @@
             </div>
         </div>
 
+        <!-- Automation/Settings Tab -->
+        <div id="tab-automation" class="tab-content" style="display:none;">
+            <div class="card">
+                <h3>الأتمتة والملف الشخصي</h3>
+                <p class="small" style="margin-bottom: 2rem;">إعدادات الرد التلقائي وربط الـ Webhook الخاص بك</p>
+                
+                <div class="grid">
+                    <div>
+                        <h4>🤖 الرد التلقائي</h4>
+                        <div style="margin: 1rem 0;">
+                            <label class="switch-label" style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                                <input type="checkbox" id="auto-reply-toggle" style="width:auto; margin:0;">
+                                تفعيل الرد التلقائي الترحيبي
+                            </label>
+                        </div>
+                        <textarea id="auto-reply-text" rows="3" placeholder="مثال: أهلاً بك! سيتم الرد عليك قريباً."></textarea>
+                    </div>
+
+                    <div>
+                        <h4>🔗 Webhook (للمطورين)</h4>
+                        <p class="small">سيتم إرسال كل رسالة واردة إلى هذا الرابط</p>
+                        <input type="text" id="webhook-url" placeholder="https://your-api.com/webhook" style="margin-top:1rem;">
+                    </div>
+                </div>
+
+                <div style="margin-top: 2rem; border-top: 1px solid var(--border); padding-top: 1.5rem;">
+                    <button onclick="saveProfileSettings()" class="btn btn-primary">حفظ الإعدادات</button>
+                    <span id="save-status" style="margin-right: 1rem; font-size: 0.9rem;"></span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>معلومات الحساب</h3>
+                <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+                    <div style="flex:1;">
+                        <label>اسم المستخدم</label>
+                        <input type="text" id="profile-username" readonly style="background: rgba(0,0,0,0.02);">
+                    </div>
+                    <div style="flex:1;">
+                        <label>التوكن (API Key)</label>
+                        <div style="display:flex; gap:0.5rem;">
+                            <input type="text" id="profile-token" readonly style="background: rgba(0,0,0,0.02);">
+                            <button onclick="copyToken()" class="btn btn-outline" style="padding:0.75rem;">نسخ</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Sessions/Admin Tab -->
         <div id="tab-settings" class="tab-content" style="display:none;">
             <div class="card">
@@ -200,6 +249,10 @@
                 document.getElementById('user-display').textContent = data.username;
                 document.getElementById('my-token-display').textContent = data.token.slice(0, 10) + '...';
                 
+                // Load Profile Data
+                document.getElementById('profile-username').value = data.username;
+                document.getElementById('profile-token').value = data.token;
+                
                 // Admin check
                 if (data.username === 'admin') {
                     document.getElementById('admin-tab-btn').style.display = 'block';
@@ -243,6 +296,15 @@
                 document.getElementById('count-sent').textContent = data.sentCount || 0;
                 document.getElementById('count-received').textContent = data.receivedCount || 0;
                 
+                // Update Automation fields if empty
+                if (!document.getElementById('webhook-url').value && data.webhookUrl) {
+                    document.getElementById('webhook-url').value = data.webhookUrl;
+                }
+                if (!document.getElementById('auto-reply-text').value && data.autoReplyText) {
+                    document.getElementById('auto-reply-text').value = data.autoReplyText;
+                    document.getElementById('auto-reply-toggle').checked = !!data.autoReplyEnabled;
+                }
+
                 renderChat(data.msgs);
 
                 // If admin tab is active, refresh it too

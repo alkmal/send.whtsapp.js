@@ -191,24 +191,18 @@ let connState = {}; // token -> open/close/connecting
 let qrRaw = {}; // token -> qr raw string
 let qrDataUrl = {}; // token -> qr dataUrl
 let reconnecting = {};
-let reconnectAttempts = {};
+let starting = {};
 let nextReconnectAt = {};
-let readyAt = {};
-let graceUntil = {}; // token -> timestamp
-let lastEventAt = {}; // token -> timestamp
-
-let reconnectTimers = {};
+let reconnectAttempts = {};
 let watchdogTimers = {};
-
-// NEW: per-token start mutex
-let starting = {}; // token -> boolean
-
-// NEW: conflict flag to stop infinite loops
+let lastEventAt = {};
+let graceUntil = {};
+let readyAt = {};
 let conflictStop = {}; // token -> boolean
 
 // logs & messages (ring buffers)
 const LOG_KEEP = 250;
-const MSG_KEEP = 50;
+const MSG_KEEP = 100; // Increased
 let tokenLogs = {}; // token -> [{ts, level, msg, meta}]
 let tokenMsgs = {}; // token -> [{ts, from, text, id}]
 
@@ -622,13 +616,15 @@ async function startSocketForToken(token) {
         }
       });
 
-      sock.ev.on("messages.upsert", (m) => {
+      sock.ev.on("messages.upsert", async (m) => {
         try {
           lastEventAt[token] = Date.now();
           const msg = m?.messages?.[0];
-          if (!msg) return;
+          if (!msg || msg.key.fromMe) return; // Skip own messages
+
           const from = msg.key?.remoteJid || "unknown";
           const id = msg.key?.id || null;
+          const pushName = msg.pushName || "Unknown";
 
           const text =
             msg.message?.conversation ||
@@ -638,14 +634,51 @@ async function startSocketForToken(token) {
             msg.message?.documentMessage?.caption ||
             "";
 
-          if (text) pushMsg(token, from, text, id);
+          if (!text) return;
+
+          pushMsg(token, from, text, id);
+
+          const user = users[token];
+
+          // 1. Webhook Call
+          if (user.webhookUrl) {
+            fetch(user.webhookUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                token,
+                from,
+                name: pushName,
+                text,
+                timestamp: Date.now(),
+                messageId: id,
+              }),
+            }).catch((e) =>
+              pushLog(token, "error", "Webhook failed", { err: e.message }),
+            );
+          }
+
+          // 2. Auto Reply
+          if (user.autoReplyEnabled && user.autoReplyText) {
+            // Avoid loops if multiple bots talk to each other
+            // (Usually checked by fromMe, but good to have)
+            setTimeout(async () => {
+              try {
+                await sendWithRetry(sock, from, { text: user.autoReplyText }, 2);
+                pushLog(token, "info", "Auto-reply sent", { to: from });
+              } catch (e) {
+                pushLog(token, "error", "Auto-reply failed", {
+                  err: e.message,
+                });
+              }
+            }, 2000);
+          }
         } catch (_) {}
       });
 
       armWatchdog(token);
 
       sock.ev.on("connection.update", (update) => {
-        const { connection, lastDisconnect, qr } = update;
         lastEventAt[token] = Date.now();
 
         if (qr) {
@@ -980,7 +1013,28 @@ app.post("/api/session/reset", requireLogin, (req, res) => {
     res.json({ ok: true });
 });
 
-// Public pairing page (no login)
+// Update Profile (User & Admin)
+app.post("/api/user/update-profile", requireLogin, (req, res) => {
+    const token = req.session.user.token;
+    const { webhookUrl, autoReplyText, autoReplyEnabled } = req.body;
+    
+    if (users[token]) {
+        if (webhookUrl !== undefined) users[token].webhookUrl = webhookUrl;
+        if (autoReplyText !== undefined) users[token].autoReplyText = autoReplyText;
+        if (autoReplyEnabled !== undefined) users[token].autoReplyEnabled = !!autoReplyEnabled;
+        
+        saveUsers(users);
+        res.json({ ok: true });
+    } else {
+        res.status(404).json({ error: "User not found" });
+    }
+});
+
+// Admin Route to see all logs (Real Integrated Control)
+app.get("/api/admin/all-logs", requireLogin, (req, res) => {
+    if (req.session.user.username !== 'admin') return res.status(403).end();
+    res.json(tokenLogs);
+});
 app.get("/qr/:token", async (req, res) => {
   const token = req.params.token;
   const u = users[token];
@@ -1286,7 +1340,7 @@ app.get("/login", (req, res) => {
           <div style="font-size:18px;font-weight:700;margin-bottom:6px">Dashboard Login</div>
           <div class="small">هذه الصفحة للدخول للوحة الإدارة فقط.</div>
           <form method="POST" action="/login" style="margin-top:12px">
-            <input name="username" placeholder="username" required />
+            <input name="username" placeholder="اسم المستخدم، الجوال، أو الإيميل" required />
             <input name="password" placeholder="password" type="password" required />
             <button>Login</button>
           </form>
@@ -1302,12 +1356,21 @@ app.get("/login", (req, res) => {
 });
 
 app.post("/login", (req, res) => {
-  const { username, password } = req.body;
-  const tokenEntry = Object.entries(users).find(
-    ([_, u]) => u.username === username && u.password === password,
+  const { username, password } = req.body; // Using 'username' as general identifier field
+  const users = loadUsers();
+  
+  // Find user by username, phone, or email
+  const tokenEntry = Object.entries(users).find(([_, u]) => 
+    (u.username === username || u.phone === username || u.email === username) && 
+    u.password === password
   );
+
   if (!tokenEntry) return res.status(401).send("❌ بيانات الدخول غير صحيحة");
-  req.session.user = { username, token: tokenEntry[0] };
+  
+  req.session.user = { 
+    username: tokenEntry[1].username, 
+    token: tokenEntry[0] 
+  };
   res.redirect("/dashboard");
 });
 
@@ -1375,9 +1438,23 @@ app.get("/dashboard", requireLogin, (req, res) => {
 });
 
 // Create user (admin-only) - Can also be used for registration update
-app.post("/auth", requireLogin, requirePrimary, (req, res) => {
-    const { username, password, limit } = req.body;
-    if (!username || !password) return res.status(400).send("الاسم وكلمة المرور مطلوبة");
+app.post("/auth", (req, res) => {
+    const { username, password, phone, email, limit } = req.body;
+    
+    if (!username || !password || !phone || !email) {
+        return res.status(400).send("جميع الحقول (الاسم، كلمة المرور، الهاتف، الإيميل) مطلوبة.");
+    }
+
+    const users = loadUsers();
+    
+    // Check for duplicates
+    const duplicate = Object.values(users).find(u => 
+        u.username === username || u.phone === phone || u.email === email
+    );
+    
+    if (duplicate) {
+        return res.status(409).send("خطأ: اسم المستخدم أو الهاتف أو الإيميل مسجل مسبقاً.");
+    }
 
     const token = generateToken();
     const sessionPath = path.join(SESSIONS_DIR, token);
@@ -1385,10 +1462,12 @@ app.post("/auth", requireLogin, requirePrimary, (req, res) => {
     users[token] = {
         username,
         password,
+        phone,
+        email,
         token,
         sessionPath,
         count: 0,
-        limit: limit ? parseInt(limit) : 10, // Default limit for new users
+        limit: limit ? parseInt(limit) : 10,
         waId: null,
         waName: null,
         lastDisconnectCode: null,
@@ -1398,9 +1477,12 @@ app.post("/auth", requireLogin, requirePrimary, (req, res) => {
     saveUsers(users);
 
     conflictStop[token] = false;
-    pushLog(token, "info", "User created", { username, limit: users[token].limit });
+    pushLog(token, "info", "Account created successfully", { username, phone, email });
+    
+    // Auto-login session if coming from public registration
+    req.session.user = { username, token };
+    
     startSocketForToken(token).catch(console.error);
-
     res.redirect(`/dashboard`);
 });
 
@@ -1490,7 +1572,5 @@ app.post("/send-text", async (req, res) => {
 // ===================== Server =====================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(
-    `API listening on :${PORT} (pid=${process.pid}, primary=${isPrimaryInstance})`,
-  );
+    console.log(`API listening on :${PORT} (pid=${process.pid}, primary=${isPrimaryInstance})`);
 });

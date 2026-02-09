@@ -17,14 +17,24 @@
             </div>
 
             <form id="register-form" action="/auth" method="POST">
-                <div style="margin-bottom: 1.5rem;">
+                <div style="margin-bottom: 1rem;">
                     <label>اسم المستخدم</label>
-                    <input type="text" name="username" placeholder="اختر اسم مستخدم فريد" required autofocus>
+                    <input type="text" name="username" placeholder="اختر اسم مستخدم" required autofocus>
                 </div>
 
-                <div style="margin-bottom: 1.5rem;">
+                <div style="margin-bottom: 1rem;">
+                    <label>رقم الجوال</label>
+                    <input type="text" name="phone" placeholder="966500000000" required>
+                </div>
+
+                <div style="margin-bottom: 1rem;">
+                    <label>البريد الإلكتروني</label>
+                    <input type="email" name="email" placeholder="example@mail.com" required>
+                </div>
+
+                <div style="margin-bottom: 1rem;">
                     <label>كلمة المرور</label>
-                    <input type="password" name="password" placeholder="اختر كلمة مرور قوية" required>
+                    <input type="password" name="password" placeholder="كلمة المرور" required>
                 </div>
 
                 <div style="padding: 1rem; background: rgba(37, 99, 235, 0.05); border-radius: 0.5rem; margin-bottom: 1.5rem;">
