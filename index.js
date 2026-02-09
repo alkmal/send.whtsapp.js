@@ -728,6 +728,8 @@ async function startSocketForToken(token) {
 
       sock.ev.on("connection.update", (update) => {
         lastEventAt[token] = Date.now();
+        
+        const { qr, connection, lastDisconnect } = update;
 
         if (qr) {
           qrRaw[token] = qr;
