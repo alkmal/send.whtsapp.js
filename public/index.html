@@ -173,11 +173,19 @@
             <div class="card">
                 <h3>معلومات الحساب</h3>
                 <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
-                    <div style="flex:1;">
-                        <label>اسم المستخدم</label>
+                    <div style="flex:1; min-width: 250px;">
+                        <label>الاسم الكامل</label>
                         <input type="text" id="profile-username" readonly style="background: rgba(0,0,0,0.02);">
                     </div>
-                    <div style="flex:1;">
+                    <div style="flex:1; min-width: 250px;">
+                        <label>رقم الجوال</label>
+                        <input type="text" id="profile-phone" readonly style="background: rgba(0,0,0,0.02);">
+                    </div>
+                    <div style="flex:1; min-width: 250px;">
+                        <label>البريد الإلكتروني</label>
+                        <input type="text" id="profile-email" readonly style="background: rgba(0,0,0,0.02);">
+                    </div>
+                    <div style="flex:1; min-width: 250px;">
                         <label>التوكن (API Key)</label>
                         <div style="display:flex; gap:0.5rem;">
                             <input type="text" id="profile-token" readonly style="background: rgba(0,0,0,0.02);">
@@ -199,7 +207,7 @@
                         <thead>
                             <tr>
                                 <th>المستخدم</th>
-                                <th>التوكن</th>
+                                <th>الاتصال (جوال/إيميل)</th>
                                 <th>الرسائل (مرسل/محدد)</th>
                                 <th>الحالة</th>
                                 <th>إجراءات</th>
@@ -251,10 +259,12 @@
                 
                 // Load Profile Data
                 document.getElementById('profile-username').value = data.username;
+                document.getElementById('profile-phone').value = data.phone || "";
+                document.getElementById('profile-email').value = data.email || "";
                 document.getElementById('profile-token').value = data.token;
                 
                 // Admin check
-                if (data.username === 'admin') {
+                if (data.isAdmin) {
                     document.getElementById('admin-tab-btn').style.display = 'block';
                 }
 
@@ -325,7 +335,10 @@
                 body.innerHTML = users.map(u => `
                     <tr>
                         <td><b>${u.username}</b></td>
-                        <td class="small mono">${u.token.slice(0,8)}...</td>
+                        <td class="small">
+                            <div>${u.phone}</div>
+                            <div style="opacity:0.6">${u.email}</div>
+                        </td>
                         <td>
                             <div style="display:flex; align-items:center; gap:10px;">
                                 <span>${u.count} / ${u.limit === -1 ? '∞' : u.limit}</span>

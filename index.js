@@ -42,8 +42,13 @@ app.use(
 // ===================== Paths =====================
 const USERS_FILE = path.join(__dirname, "users.json");
 const SESSIONS_DIR = path.join(__dirname, "sessions");
-if (!fs.existsSync(SESSIONS_DIR))
-  fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+const STORAGE_DIR = path.join(__dirname, "data");
+const LOGS_STORAGE = path.join(STORAGE_DIR, "logs");
+const MSGS_STORAGE = path.join(STORAGE_DIR, "messages");
+
+[SESSIONS_DIR, STORAGE_DIR, LOGS_STORAGE, MSGS_STORAGE].forEach(d => {
+    if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+});
 
 // ===================== Users Storage =====================
 function loadUsers() {
@@ -58,6 +63,21 @@ function saveUsers(users) {
   fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
 }
 const users = loadUsers();
+
+// Load historical data from files on start
+Object.keys(users).forEach(token => {
+    const logFile = path.join(LOGS_STORAGE, `${token}.log`);
+    const msgFile = path.join(MSGS_STORAGE, `${token}.json`);
+    
+    if (fs.existsSync(logFile)) {
+        const lines = fs.readFileSync(logFile, "utf8").trim().split("\n");
+        tokenLogs[token] = lines.slice(-LOG_KEEP).map(l => JSON.parse(l));
+    }
+    if (fs.existsSync(msgFile)) {
+        const lines = fs.readFileSync(msgFile, "utf8").trim().split("\n");
+        tokenMsgs[token] = lines.slice(-MSG_KEEP).map(l => JSON.parse(l));
+    }
+});
 
 function generateToken() {
   return crypto.randomBytes(16).toString("hex");
@@ -200,26 +220,36 @@ let graceUntil = {};
 let readyAt = {};
 let conflictStop = {}; // token -> boolean
 
-// logs & messages (ring buffers)
+// logs & messages (ring buffers + file persistence)
 const LOG_KEEP = 250;
-const MSG_KEEP = 100; // Increased
-let tokenLogs = {}; // token -> [{ts, level, msg, meta}]
-let tokenMsgs = {}; // token -> [{ts, from, text, id}]
+const MSG_KEEP = 100;
+let tokenLogs = {}; 
+let tokenMsgs = {}; 
 
 function pushLog(token, level, msg, meta = null) {
   if (!tokenLogs[token]) tokenLogs[token] = [];
-  tokenLogs[token].push({ ts: Date.now(), level, msg, meta });
-  if (tokenLogs[token].length > LOG_KEEP)
-    tokenLogs[token].splice(0, tokenLogs[token].length - LOG_KEEP);
-  sseSend(token, { type: "log", ts: Date.now(), level, msg, meta });
+  const entry = { ts: Date.now(), level, msg, meta };
+  tokenLogs[token].push(entry);
+  if (tokenLogs[token].length > LOG_KEEP) tokenLogs[token].shift();
+  
+  // Persist to file
+  const logFile = path.join(LOGS_STORAGE, `${token}.log`);
+  fs.appendFileSync(logFile, JSON.stringify(entry) + "\n");
+  
+  sseSend(token, { type: "log", ...entry });
 }
 
 function pushMsg(token, from, text, id) {
   if (!tokenMsgs[token]) tokenMsgs[token] = [];
-  tokenMsgs[token].push({ ts: Date.now(), from, text, id });
-  if (tokenMsgs[token].length > MSG_KEEP)
-    tokenMsgs[token].splice(0, tokenMsgs[token].length - MSG_KEEP);
-  sseSend(token, { type: "msg", ts: Date.now(), from, text, id });
+  const entry = { ts: Date.now(), from, text, id };
+  tokenMsgs[token].push(entry);
+  if (tokenMsgs[token].length > MSG_KEEP) tokenMsgs[token].shift();
+  
+  // Persist to file
+  const msgFile = path.join(MSGS_STORAGE, `${token}.json`);
+  fs.appendFileSync(msgFile, JSON.stringify(entry) + "\n");
+  
+  sseSend(token, { type: "msg", ...entry });
 }
 
 // ===================== SSE (Realtime) =====================
@@ -305,38 +335,55 @@ function tokenLockFile(token) {
 }
 
 function tryAcquireTokenLock(token) {
-  const u = users[token];
-  if (!u) return false;
+    const u = users[token];
+    if (!u) return false;
 
-  const sp = tokenSessionPath(token);
-  if (!fs.existsSync(sp)) fs.mkdirSync(sp, { recursive: true });
+    const sp = tokenSessionPath(token);
+    if (!fs.existsSync(sp)) fs.mkdirSync(sp, { recursive: true });
 
-  const lf = tokenLockFile(token);
-  try {
-    const fd = fs.openSync(lf, "wx");
-    fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, at: Date.now() }));
-    fs.closeSync(fd);
-    return true;
-  } catch (_) {
-    // steal if stale
+    const lf = tokenLockFile(token);
+
+    const writeLock = () => {
+        try {
+            const data = JSON.stringify({ pid: process.pid, at: Date.now() });
+            fs.writeFileSync(lf, data);
+            return true;
+        } catch (e) {
+            console.error(`[LOCK ERROR] Failed to write lock for ${token}:`, e.message);
+            return false;
+        }
+    };
+
+    if (!fs.existsSync(lf)) {
+        return writeLock();
+    }
+
+    // Try to read existing lock
     try {
-      const info = JSON.parse(fs.readFileSync(lf, "utf8"));
-      const oldPid = info?.pid;
-      const oldAt = info?.at || 0;
-      const stale = Date.now() - oldAt > 120_000;
-      if (!pidExists(oldPid) || stale) {
-        fs.unlinkSync(lf);
-        const fd = fs.openSync(lf, "wx");
-        fs.writeFileSync(
-          fd,
-          JSON.stringify({ pid: process.pid, at: Date.now() }),
-        );
-        fs.closeSync(fd);
-        return true;
-      }
-    } catch (_) {}
-    return false;
-  }
+        const content = fs.readFileSync(lf, "utf8");
+        if (!content.trim()) throw new Error("Empty lock file");
+        
+        const info = JSON.parse(content);
+        const oldPid = info?.pid;
+        const oldAt = info?.at || 0;
+        const stale = Date.now() - oldAt > 120_000;
+
+        // If it's our own PID, we already have it (re-entry)
+        if (oldPid === process.pid) {
+            return writeLock(); // refresh timestamp
+        }
+
+        if (!pidExists(oldPid) || stale) {
+            // Take over the lock
+            return writeLock();
+        }
+        
+        return false; // Valid lock exists and is held by a live process
+    } catch (e) {
+        // Corrupted or invalid lock file - safe to take over
+        console.warn(`[LOCK WARN] Overriding invalid lock for ${token}: ${e.message}`);
+        return writeLock();
+    }
 }
 
 function releaseTokenLock(token) {
@@ -845,7 +892,15 @@ async function startSocketForToken(token) {
 
 // ===================== API Routes =====================
 app.get("/api/me", requireLogin, (req, res) => {
-  res.json(req.session.user);
+    const user = users[req.session.user.token];
+    if (!user) return res.status(404).json({ error: "User not found" });
+    res.json({
+        username: user.username,
+        token: user.token,
+        phone: user.phone,
+        email: user.email,
+        limit: user.limit
+    });
 });
 
 // ===================== Public Pairing Routes (NO LOGIN) =====================
@@ -967,20 +1022,27 @@ app.get("/api/status-full/:token", requireLogin, (req, res) => {
 });
 
 app.get("/api/admin/users", requireLogin, (req, res) => {
-    // Basic security: Only 'admin' user can see all users
-    if (req.session.user.username !== 'admin') {
+    const isAdmin = req.session.user.isAdmin;
+    
+    if (!isAdmin) {
+        // Regular users can ONLY see themselves
         const u = users[req.session.user.token];
-        return res.json([{
+        return res.json([u ? {
             username: u.username,
+            phone: u.phone || "---",
+            email: u.email || "---",
             token: u.token,
             count: u.count || 0,
             limit: u.limit || 10,
             state: connState[u.token] || "close"
-        }]);
+        } : null].filter(Boolean));
     }
 
+    // Admin sees everything
     const allUsers = Object.values(users).map(u => ({
         username: u.username,
+        phone: u.phone || "---",
+        email: u.email || "---",
         token: u.token,
         count: u.count || 0,
         limit: u.limit || 10,
@@ -1356,10 +1418,9 @@ app.get("/login", (req, res) => {
 });
 
 app.post("/login", (req, res) => {
-  const { username, password } = req.body; // Using 'username' as general identifier field
+  const { username, password } = req.body; 
   const users = loadUsers();
   
-  // Find user by username, phone, or email
   const tokenEntry = Object.entries(users).find(([_, u]) => 
     (u.username === username || u.phone === username || u.email === username) && 
     u.password === password
@@ -1367,9 +1428,11 @@ app.post("/login", (req, res) => {
 
   if (!tokenEntry) return res.status(401).send("❌ بيانات الدخول غير صحيحة");
   
+  const [token, userData] = tokenEntry;
   req.session.user = { 
-    username: tokenEntry[1].username, 
-    token: tokenEntry[0] 
+    username: userData.username, 
+    token: token,
+    isAdmin: !!userData.isAdmin
   };
   res.redirect("/dashboard");
 });
@@ -1456,6 +1519,7 @@ app.post("/auth", (req, res) => {
         return res.status(409).send("خطأ: اسم المستخدم أو الهاتف أو الإيميل مسجل مسبقاً.");
     }
 
+    // UNIQUE TOKEN FOR USER
     const token = generateToken();
     const sessionPath = path.join(SESSIONS_DIR, token);
 
@@ -1465,6 +1529,7 @@ app.post("/auth", (req, res) => {
         phone,
         email,
         token,
+        isAdmin: username.toLowerCase() === 'admin', // Flag for admin
         sessionPath,
         count: 0,
         limit: limit ? parseInt(limit) : 10,
@@ -1479,8 +1544,12 @@ app.post("/auth", (req, res) => {
     conflictStop[token] = false;
     pushLog(token, "info", "Account created successfully", { username, phone, email });
     
-    // Auto-login session if coming from public registration
-    req.session.user = { username, token };
+    // Auto-login session
+    req.session.user = { 
+        username: users[token].username, 
+        token: token,
+        isAdmin: users[token].isAdmin
+    };
     
     startSocketForToken(token).catch(console.error);
     res.redirect(`/dashboard`);
