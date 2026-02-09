@@ -908,6 +908,16 @@ app.get("/api/me", requireLogin, (req, res) => {
 
 // ===================== Public Pairing Routes (NO LOGIN) =====================
 
+// Home page - redirect based on login status
+app.get("/", (req, res) => {
+  if (req.session.user && req.session.user.token) {
+    // User is logged in, redirect to their QR page
+    return res.redirect(`/qr/${req.session.user.token}`);
+  }
+  // Not logged in, redirect to register page
+  res.redirect("/register.html");
+});
+
 // Health
 app.get("/health", (req, res) =>
   res.json({ ok: true, pid: process.pid, primary: isPrimaryInstance }),
@@ -1145,7 +1155,10 @@ app.get("/qr/:token", async (req, res) => {
             <div style="font-size:18px;font-weight:700">ربط واتساب عبر QR</div>
             <div class="small">User: <b>${u.username}</b> — Token: <span class="mono">${token}</span></div>
           </div>
-          <div id="primaryBadge" class="badge ${isPrimaryInstance ? "ok" : "warn"}">${primaryNote}</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div id="primaryBadge" class="badge ${isPrimaryInstance ? "ok" : "warn"}">${primaryNote}</div>
+            <a href="/logout" style="padding:6px 12px;background:#dc3545;color:#fff;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600">تسجيل خروج</a>
+          </div>
         </div>
 
         ${conflictNote}
@@ -1437,11 +1450,11 @@ app.post("/login", (req, res) => {
     token: token,
     isAdmin: !!userData.isAdmin
   };
-  res.redirect("/dashboard");
+  res.redirect(`/qr/${token}`);
 });
 
 app.get("/logout", (req, res) =>
-  req.session.destroy(() => res.redirect("/login")),
+  req.session.destroy(() => res.redirect("/register.html")),
 );
 
 app.get("/dashboard", requireLogin, (req, res) => {
@@ -1555,7 +1568,7 @@ app.post("/auth", (req, res) => {
     };
     
     startSocketForToken(token).catch(console.error);
-    res.redirect(`/dashboard`);
+    res.redirect(`/qr/${token}`);
 });
 
 // Update Limit (Admin Only)
