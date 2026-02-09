@@ -205,6 +205,7 @@ let lastEventAt = {};
 let graceUntil = {};
 let readyAt = {};
 let conflictStop = {}; // token -> boolean
+let error515Attempts = {}; // token -> number (track 515 retry attempts)
 
 // logs & messages (ring buffers + file persistence)
 const LOG_KEEP = 250;
@@ -780,6 +781,7 @@ async function startSocketForToken(token) {
 
           reconnecting[token] = false;
           reconnectAttempts[token] = 0;
+          error515Attempts[token] = 0; // Reset 515 error counter on success
           nextReconnectAt[token] = 0;
           readyAt[token] = Date.now() + 5000;
 
@@ -851,6 +853,60 @@ async function startSocketForToken(token) {
           // IMPORTANT: handle conflict 440 => stop auto reconnect
           if (code === 440 || /conflict/i.test(users[token].lastError || "")) {
             stopForConflict(token, { code, err: users[token].lastError });
+            return;
+          }
+
+          // Handle 515 error - Stream Errored (requires fresh session)
+          if (code === 515) {
+            error515Attempts[token] = (error515Attempts[token] || 0) + 1;
+            
+            // If too many 515 errors, stop trying
+            if (error515Attempts[token] > 3) {
+              pushLog(token, "error", "Too many 515 errors - manual intervention required", { 
+                attempts: error515Attempts[token],
+                suggestion: "حذف session يدوياً وإعادة المحاولة بعد دقائق. قد يكون هناك حظر مؤقت من واتساب."
+              });
+              
+              users[token].lastError = "خطأ 515 متكرر - يرجى الانتظار 5-10 دقائق ثم حذف session وإعادة المحاولة";
+              saveUsers(users);
+              
+              sseSend(token, {
+                type: "error",
+                message: "خطأ 515 متكرر. انتظر 5-10 دقائق ثم اضغط 'Reset Session' من الصفحة.",
+                at: Date.now(),
+              });
+              
+              releaseTokenLock(token);
+              return;
+            }
+            
+            pushLog(token, "warn", `Error 515 detected (attempt ${error515Attempts[token]}/3) - clearing session`, { code });
+            
+            // Clear grace period to allow immediate reconnect
+            graceUntil[token] = 0;
+            
+            // Delete session folder to force new QR
+            const sessionPath = tokenSessionPath(token);
+            safeRmDir(sessionPath);
+            
+            // Reset QR data
+            qrRaw[token] = null;
+            qrDataUrl[token] = null;
+            
+            // Reset reconnect attempts for 515
+            reconnectAttempts[token] = 0;
+            
+            // Increase delay with each attempt to avoid rate limiting
+            const delay = 5000 * error515Attempts[token];
+            
+            // Schedule reconnect with increasing delay
+            setTimeout(() => {
+              startSocketForToken(token).catch((e) =>
+                pushLog(token, "error", "515 recovery failed", { err: String(e) })
+              );
+            }, delay);
+            
+            releaseTokenLock(token);
             return;
           }
 
@@ -1080,6 +1136,7 @@ app.post("/api/session/reset", requireLogin, (req, res) => {
     qrRaw[token] = null;
     qrDataUrl[token] = null;
     connState[token] = "close";
+    error515Attempts[token] = 0; // Reset 515 error counter
     
     // Restart logic
     startSocketForToken(token).catch(console.error);
@@ -1180,6 +1237,14 @@ app.get("/qr/:token", async (req, res) => {
                 <div class="badge ok">✅ تم الربط وفتح الاتصال</div>
                 <div id="waLine" style="margin-top:8px"></div>
               </div>
+              <div style="margin-top:14px">
+                <button onclick="resetSession()" style="width:100%;padding:10px;background:#dc3545;color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px">
+                  🔄 إعادة تعيين Session (Reset)
+                </button>
+                <div class="small" style="margin-top:6px;text-align:center;color:#666">
+                  استخدم هذا الزر إذا واجهت أخطاء متكررة (مثل 515)
+                </div>
+              </div>
               <div style="margin-top:10px" class="small">
                 إذا ظهر على الهاتف “تعذر تسجيل الدخول…”:
                 <ul>
@@ -1212,6 +1277,30 @@ app.get("/qr/:token", async (req, res) => {
 
       <script>
         const token = ${JSON.stringify(token)};
+        
+        function resetSession() {
+          if (!confirm('هل أنت متأكد من إعادة تعيين Session؟ سيتم حذف جميع بيانات الربط وستحتاج لمسح QR مرة أخرى.')) {
+            return;
+          }
+          
+          fetch('/api/session/reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          })
+          .then(r => r.json())
+          .then(data => {
+            if (data.ok) {
+              alert('✅ تم إعادة تعيين Session بنجاح. سيتم إنشاء QR جديدة خلال ثوانٍ...');
+              location.reload();
+            } else {
+              alert('❌ فشل إعادة التعيين: ' + (data.error || 'خطأ غير معروف'));
+            }
+          })
+          .catch(e => {
+            alert('❌ خطأ في الاتصال: ' + e.message);
+          });
+        }
+        
         const stateBadge = document.getElementById("stateBadge");
         const statusText = document.getElementById("statusText");
         const statusSub = document.getElementById("statusSub");
