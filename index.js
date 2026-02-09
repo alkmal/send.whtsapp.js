@@ -211,6 +211,7 @@ let connState = {}; // token -> open/close/connecting
 let qrRaw = {}; // token -> qr raw string
 let qrDataUrl = {}; // token -> qr dataUrl
 let reconnecting = {};
+let reconnectTimers = {}; // Added missing variable
 let starting = {};
 let nextReconnectAt = {};
 let reconnectAttempts = {};
