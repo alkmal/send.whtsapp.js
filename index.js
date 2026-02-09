@@ -934,7 +934,18 @@ app.get("/api/status-full/:token", requireLogin, (req, res) => {
 });
 
 app.get("/api/admin/users", requireLogin, (req, res) => {
-    // In a real app we'd check if req.session.user.isAdmin
+    // Basic security: Only 'admin' user can see all users
+    if (req.session.user.username !== 'admin') {
+        const u = users[req.session.user.token];
+        return res.json([{
+            username: u.username,
+            token: u.token,
+            count: u.count || 0,
+            limit: u.limit || 10,
+            state: connState[u.token] || "close"
+        }]);
+    }
+
     const allUsers = Object.values(users).map(u => ({
         username: u.username,
         token: u.token,
@@ -943,6 +954,30 @@ app.get("/api/admin/users", requireLogin, (req, res) => {
         state: connState[u.token] || "close"
     }));
     res.json(allUsers);
+});
+
+// Reset Session
+app.post("/api/session/reset", requireLogin, (req, res) => {
+    const token = req.session.user.token;
+    if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+    // Stop current socket
+    safeEndSocket(token);
+    
+    // Remote session folder
+    const sessionPath = tokenSessionPath(token);
+    safeRmDir(sessionPath);
+    
+    // Reset states
+    qrRaw[token] = null;
+    qrDataUrl[token] = null;
+    connState[token] = "close";
+    
+    // Restart logic
+    startSocketForToken(token).catch(console.error);
+    
+    pushLog(token, "info", "Session reset by user");
+    res.json({ ok: true });
 });
 
 // Public pairing page (no login)

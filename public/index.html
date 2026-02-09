@@ -31,28 +31,41 @@
         <div class="nav-tabs">
             <div class="nav-tab active" data-tab="overview">نظرة عامة</div>
             <div class="nav-tab" data-tab="send">إرسال رسالة تجريبية</div>
-            <div class="nav-tab" data-tab="history">سجل الاستلام</div>
-            <div class="nav-tab" data-tab="settings">الإعدادات</div>
+            <div class="nav-tab" data-tab="history">الدردشة التفاعلية</div>
+            <div class="nav-tab" id="admin-tab-btn" data-tab="settings" style="display:none;">إدارة النظام</div>
         </div>
 
         <!-- Overview Tab -->
         <div id="tab-overview" class="tab-content">
             <div class="grid">
                 <div class="card">
-                    <h3>حالة الاتصال</h3>
-                    <div id="connection-status-box" style="margin: 1.5rem 0; padding: 1rem; border-radius: 0.5rem; background: rgba(0,0,0,0.03);">
+                    <div style="display:flex; justify-content:space-between; align-items:start;">
+                        <h3>حالة الاتصال</h3>
+                        <div style="font-size: 0.8rem; color: var(--text-muted); background: rgba(0,0,0,0.05); padding: 4px 10px; border-radius: 5px;">
+                            TOKEN: <span id="my-token-display" style="font-family: monospace;">---</span>
+                        </div>
+                    </div>
+                    
+                    <div id="connection-status-box" style="margin: 1.5rem 0; padding: 1rem; border-radius: 0.5rem; background: rgba(0,0,0,0.03); border: 1px solid var(--border);">
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <div id="status-spinner" class="status-dot" style="background: var(--warning);"></div>
-                            <span id="status-text">جاري التحقق...</span>
+                            <span id="status-text" style="font-weight:700;">جاري التحقق...</span>
                         </div>
-                        <div id="wa-info" style="margin-top: 5px; font-weight: 600;"></div>
+                        <div id="wa-info" style="margin-top: 8px; font-size: 0.9rem;"></div>
                     </div>
-                    <div class="qr-container" id="qr-wrap" style="display:none;">
-                        <img id="qr-image" src="" alt="WhatsApp QR">
-                        <p class="small">امسح الكود من تطبيق واتساب لربط الجهاز</p>
+
+                    <div id="session-controls" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                        <button onclick="reconnect()" class="btn btn-outline" style="flex:1; padding: 0.5rem; font-size: 0.85rem;">🔄 إعادة اتصال</button>
+                        <button onclick="resetSession()" class="btn btn-outline" style="flex:1; padding: 0.5rem; font-size: 0.85rem; color: var(--danger); border-color: rgba(239, 68, 68, 0.2);">🗑️ مسح الجلسة (New QR)</button>
                     </div>
+
+                    <div class="qr-container" id="qr-wrap" style="display:none; padding: 1rem; background: white; border-radius: 1rem; border: 1px dashed var(--border);">
+                        <img id="qr-image" src="" alt="WhatsApp QR" style="width: 200px;">
+                        <p class="small" style="text-align: center; margin-top: 1rem;">افتح واتساب > الأجهزة المرتبطة > ربط جهاز</p>
+                    </div>
+                    
                     <div id="connected-actions" style="display:none;">
-                        <span class="badge badge-success">متصل الآن</span>
+                        <div class="badge badge-success" style="width: 100%; text-align: center; padding: 0.75rem;">✅ الجهاز مرتبط ومشحون</div>
                     </div>
                 </div>
 
@@ -177,7 +190,6 @@
         // For now, assume we'll use a fetch to get status
         async function init() {
             try {
-                // Fetch current user info
                 const res = await fetch('/api/me');
                 if (!res.ok) {
                     window.location.href = '/login';
@@ -186,14 +198,36 @@
                 const data = await res.json();
                 userToken = data.token;
                 document.getElementById('user-display').textContent = data.username;
+                document.getElementById('my-token-display').textContent = data.token.slice(0, 10) + '...';
                 
+                // Admin check
+                if (data.username === 'admin') {
+                    document.getElementById('admin-tab-btn').style.display = 'block';
+                }
+
                 startSSE(userToken);
                 refreshFullStatus();
-                // Refresh full status every 30 seconds as backup
                 setInterval(refreshFullStatus, 30000);
             } catch (e) {
                 console.error("Init failed", e);
                 window.location.href = '/login';
+            }
+        }
+
+        async function reconnect() {
+            if (!userToken) return;
+            addLog("جاري محاولة إعادة الاتصال...", "info");
+            fetch(`/ensure-start/${userToken}`).then(() => refreshFullStatus());
+        }
+
+        async function resetSession() {
+            if (!confirm("سيتم مسح بيانات الجلسة الحالية وإنشاء كود QR جديد. هل أنت متأكد؟")) return;
+            addLog("جاري مسح الجلسة والبدء من جديد...", "warn");
+            
+            const res = await fetch('/api/session/reset', { method: 'POST' });
+            if (res.ok) {
+                addLog("تم إعادة ضبط الجلسة بنجاح", "ok");
+                refreshFullStatus();
             }
         }
 
