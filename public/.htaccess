@@ -1,0 +1,8 @@
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION BEGIN
+PassengerAppRoot "/home/ajneccom/demo/whatsapp"
+PassengerBaseURI "/"
+PassengerNodejs "/home/ajneccom/nodevenv/demo/whatsapp/18/bin/node"
+PassengerAppType node
+PassengerStartupFile index.js
+PassengerAppLogFile "/home/ajneccom/logs/passenger_whatsapp.log"
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION END

@@ -1,0 +1,8 @@
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION BEGIN
+PassengerAppRoot "/home/ajneccom/send.ajnec.com"
+PassengerBaseURI "/"
+PassengerNodejs "/home/ajneccom/nodevenv/send.ajnec.com/18/bin/node"
+PassengerAppType node
+PassengerStartupFile index.js
+PassengerAppLogFile "/home/ajneccom/send.ajnec.com/tmp/passenger.log"
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION END
