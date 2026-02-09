@@ -64,21 +64,6 @@ function saveUsers(users) {
 }
 const users = loadUsers();
 
-// Load historical data from files on start
-Object.keys(users).forEach(token => {
-    const logFile = path.join(LOGS_STORAGE, `${token}.log`);
-    const msgFile = path.join(MSGS_STORAGE, `${token}.json`);
-    
-    if (fs.existsSync(logFile)) {
-        const lines = fs.readFileSync(logFile, "utf8").trim().split("\n");
-        tokenLogs[token] = lines.slice(-LOG_KEEP).map(l => JSON.parse(l));
-    }
-    if (fs.existsSync(msgFile)) {
-        const lines = fs.readFileSync(msgFile, "utf8").trim().split("\n");
-        tokenMsgs[token] = lines.slice(-MSG_KEEP).map(l => JSON.parse(l));
-    }
-});
-
 function generateToken() {
   return crypto.randomBytes(16).toString("hex");
 }
@@ -226,6 +211,21 @@ const LOG_KEEP = 250;
 const MSG_KEEP = 100;
 let tokenLogs = {}; 
 let tokenMsgs = {}; 
+
+// Load historical data from files on start
+Object.keys(users).forEach(token => {
+    const logFile = path.join(LOGS_STORAGE, `${token}.log`);
+    const msgFile = path.join(MSGS_STORAGE, `${token}.json`);
+    
+    if (fs.existsSync(logFile)) {
+        const lines = fs.readFileSync(logFile, "utf8").trim().split("\n");
+        tokenLogs[token] = lines.slice(-LOG_KEEP).map(l => JSON.parse(l));
+    }
+    if (fs.existsSync(msgFile)) {
+        const lines = fs.readFileSync(msgFile, "utf8").trim().split("\n");
+        tokenMsgs[token] = lines.slice(-MSG_KEEP).map(l => JSON.parse(l));
+    }
+});
 
 function pushLog(token, level, msg, meta = null) {
   if (!tokenLogs[token]) tokenLogs[token] = [];
