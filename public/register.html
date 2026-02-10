@@ -1,56 +1,0 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>واتساب API | فتح حساب جديد</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
-</head>
-<body>
-    <div class="container" style="max-width: 500px; margin-top: 5vh;">
-        <div class="card">
-            <div style="text-align: center; margin-bottom: 2rem;">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">🚀</div>
-                <h1>فتح حساب جديد</h1>
-                <p style="color: var(--text-muted);">ابدأ بإرسال رسائلك عبر واتساب خلال دقائق</p>
-            </div>
-
-            <form id="register-form" action="/auth" method="POST">
-                <div style="margin-bottom: 1rem;">
-                    <label>اسم المستخدم</label>
-                    <input type="text" name="username" placeholder="اختر اسم مستخدم" required autofocus>
-                </div>
-
-                <div style="margin-bottom: 1rem;">
-                    <label>رقم الجوال</label>
-                    <input type="text" name="phone" placeholder="966500000000" required>
-                </div>
-
-                <div style="margin-bottom: 1rem;">
-                    <label>البريد الإلكتروني</label>
-                    <input type="email" name="email" placeholder="example@mail.com" required>
-                </div>
-
-                <div style="margin-bottom: 1rem;">
-                    <label>كلمة المرور</label>
-                    <input type="password" name="password" placeholder="كلمة المرور" required>
-                </div>
-
-                <div style="padding: 1rem; background: rgba(37, 99, 235, 0.05); border-radius: 0.5rem; margin-bottom: 1.5rem;">
-                    <p style="font-size: 0.9rem; color: var(--primary); font-weight: 600;">🎁 عرض ترحيبي:</p>
-                    <p style="font-size: 0.85rem;">ستحصل على <b>10 رسائل مجانية</b> عند التسجيل لتجربة النظام.</p>
-                </div>
-
-                <button type="submit" class="btn btn-primary" style="width: 100%;">
-                    إنشاء الحساب والبدء
-                </button>
-            </form>
-
-            <div style="text-align: center; margin-top: 1.5rem;">
-                <p class="small">لديك حساب بالفعل؟ <a href="/login.html" style="color: var(--primary); text-decoration: none; font-weight: 600;">تسجيل الدخول</a></p>
-            </div>
-        </div>
-    </div>
-</body>
-</html>

@@ -1,539 +1,12 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>واتساب API | لوحة التحكم</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
-    <style>
-        .status-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-left: 5px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-            <div>
-                <h1>لوحة التحكم الذكية</h1>
-                <p style="color: var(--text-muted);">أهلاً بك، <span id="user-display">المستخدم</span></p>
-            </div>
-            <div style="display: flex; gap: 1rem;">
-                <a href="/logout" class="btn btn-outline">تسجيل الخروج</a>
-            </div>
-        </header>
-
-        <div class="nav-tabs">
-            <div class="nav-tab active" data-tab="overview">نظرة عامة</div>
-            <div class="nav-tab" data-tab="send">إرسال رسالة تجريبية</div>
-            <div class="nav-tab" data-tab="history">الدردشة التفاعلية</div>
-            <div class="nav-tab" id="admin-tab-btn" data-tab="settings" style="display:none;">إدارة النظام</div>
-        </div>
-
-        <!-- Overview Tab -->
-        <div id="tab-overview" class="tab-content">
-            <div class="grid">
-                <div class="card">
-                    <div style="display:flex; justify-content:space-between; align-items:start;">
-                        <h3>حالة الاتصال</h3>
-                        <div style="font-size: 0.8rem; color: var(--text-muted); background: rgba(0,0,0,0.05); padding: 4px 10px; border-radius: 5px;">
-                            TOKEN: <span id="my-token-display" style="font-family: monospace;">---</span>
-                        </div>
-                    </div>
-                    
-                    <div id="connection-status-box" style="margin: 1.5rem 0; padding: 1rem; border-radius: 0.5rem; background: rgba(0,0,0,0.03); border: 1px solid var(--border);">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <div id="status-spinner" class="status-dot" style="background: var(--warning);"></div>
-                            <span id="status-text" style="font-weight:700;">جاري التحقق...</span>
-                        </div>
-                        <div id="wa-info" style="margin-top: 8px; font-size: 0.9rem;"></div>
-                    </div>
-
-                    <div id="session-controls" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-                        <button onclick="reconnect()" class="btn btn-outline" style="flex:1; padding: 0.5rem; font-size: 0.85rem;">🔄 إعادة اتصال</button>
-                        <button onclick="resetSession()" class="btn btn-outline" style="flex:1; padding: 0.5rem; font-size: 0.85rem; color: var(--danger); border-color: rgba(239, 68, 68, 0.2);">🗑️ مسح الجلسة (New QR)</button>
-                    </div>
-
-                    <div class="qr-container" id="qr-wrap" style="display:none; padding: 1rem; background: white; border-radius: 1rem; border: 1px dashed var(--border);">
-                        <img id="qr-image" src="" alt="WhatsApp QR" style="width: 200px;">
-                        <p class="small" style="text-align: center; margin-top: 1rem;">افتح واتساب > الأجهزة المرتبطة > ربط جهاز</p>
-                    </div>
-                    
-                    <div id="connected-actions" style="display:none;">
-                        <div class="badge badge-success" style="width: 100%; text-align: center; padding: 0.75rem;">✅ الجهاز مرتبط ومشحون</div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h3>إحصائيات سريعة</h3>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
-                        <div style="padding: 1rem; background: rgba(37, 99, 235, 0.05); border-radius: 0.5rem;">
-                            <div class="small">المرسل اليوم</div>
-                            <div style="font-size: 1.5rem; font-weight: 700;" id="count-sent">0</div>
-                        </div>
-                        <div style="padding: 1rem; background: rgba(34, 197, 94, 0.05); border-radius: 0.5rem;">
-                            <div class="small">المستلم اليوم</div>
-                            <div style="font-size: 1.5rem; font-weight: 700;" id="count-received">0</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>سجل العمليات الأخير (Logs)</h3>
-                <div id="log-container">
-                    <div class="log-entry log-info">[SYSTEM] جاري تهيئة النظام...</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Send Tab -->
-        <div id="tab-send" class="tab-content" style="display:none;">
-            <div class="card">
-                <h3>اختبار الإرسال</h3>
-                <p class="small" style="margin-bottom: 1.5rem;">أرسل رسالة تجريبية لأي رقم واتساب للتأكد من عمل النظام</p>
-                <form id="send-form">
-                    <div style="margin-bottom: 1rem;">
-                        <label>رقم المستلم (مع مفتاح الدولة بدون +)</label>
-                        <input type="text" id="send-to" placeholder="مثال: 966500000000" required>
-                    </div>
-                    <div style="margin-bottom: 1rem;">
-                        <label>محتوى الرسالة</label>
-                        <textarea id="send-msg" rows="4" placeholder="اكتب رسالتك هنا..." required></textarea>
-                    </div>
-                    <button type="submit" class="btn btn-primary" id="btn-send-test">إرسال الآن</button>
-                </form>
-                <div id="send-result" style="margin-top: 1rem;"></div>
-            </div>
-        </div>
-
-        <!-- History Tab (Interactive Chat) -->
-        <div id="tab-history" class="tab-content" style="display:none;">
-            <div class="card" style="height: 600px; display: flex; flex-direction: column; padding: 0;">
-                <div style="padding: 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-                    <h3 style="margin:0;">الدردشة التفاعلية</h3>
-                    <div class="badge badge-info" id="chat-active-badge">بانتظار الرسائل...</div>
-                </div>
-                
-                <div id="chat-messages" style="flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 1rem; background: rgba(0,0,0,0.02);">
-                    <!-- Messages will appear here -->
-                    <div style="text-align: center; color: var(--text-muted); margin-top: 2rem;">
-                        ابدأ باستلام الرسائل للرد عليها مباشرة
-                    </div>
-                </div>
-
-                <div id="reply-box" style="padding: 1rem; border-top: 1px solid var(--border); background: white; border-radius: 0 0 1rem 1rem;">
-                    <div id="reply-target-info" style="font-size: 0.8rem; margin-bottom: 0.5rem; color: var(--primary); display: none;">
-                        الرد على: <span id="reply-jid"></span>
-                    </div>
-                    <form id="reply-form" style="display: flex; gap: 0.5rem; margin: 0;">
-                        <input type="text" id="reply-input" placeholder="اكتب ردك هنا..." style="margin:0; flex: 1;" disabled>
-                        <button type="submit" class="btn btn-primary" id="btn-reply" disabled>رد</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- Automation/Settings Tab -->
-        <div id="tab-automation" class="tab-content" style="display:none;">
-            <div class="card">
-                <h3>الأتمتة والملف الشخصي</h3>
-                <p class="small" style="margin-bottom: 2rem;">إعدادات الرد التلقائي وربط الـ Webhook الخاص بك</p>
-                
-                <div class="grid">
-                    <div>
-                        <h4>🤖 الرد التلقائي</h4>
-                        <div style="margin: 1rem 0;">
-                            <label class="switch-label" style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-                                <input type="checkbox" id="auto-reply-toggle" style="width:auto; margin:0;">
-                                تفعيل الرد التلقائي الترحيبي
-                            </label>
-                        </div>
-                        <textarea id="auto-reply-text" rows="3" placeholder="مثال: أهلاً بك! سيتم الرد عليك قريباً."></textarea>
-                    </div>
-
-                    <div>
-                        <h4>🔗 Webhook (للمطورين)</h4>
-                        <p class="small">سيتم إرسال كل رسالة واردة إلى هذا الرابط</p>
-                        <input type="text" id="webhook-url" placeholder="https://your-api.com/webhook" style="margin-top:1rem;">
-                    </div>
-                </div>
-
-                <div style="margin-top: 2rem; border-top: 1px solid var(--border); padding-top: 1.5rem;">
-                    <button onclick="saveProfileSettings()" class="btn btn-primary">حفظ الإعدادات</button>
-                    <span id="save-status" style="margin-right: 1rem; font-size: 0.9rem;"></span>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>معلومات الحساب</h3>
-                <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
-                    <div style="flex:1; min-width: 250px;">
-                        <label>الاسم الكامل</label>
-                        <input type="text" id="profile-username" readonly style="background: rgba(0,0,0,0.02);">
-                    </div>
-                    <div style="flex:1; min-width: 250px;">
-                        <label>رقم الجوال</label>
-                        <input type="text" id="profile-phone" readonly style="background: rgba(0,0,0,0.02);">
-                    </div>
-                    <div style="flex:1; min-width: 250px;">
-                        <label>البريد الإلكتروني</label>
-                        <input type="text" id="profile-email" readonly style="background: rgba(0,0,0,0.02);">
-                    </div>
-                    <div style="flex:1; min-width: 250px;">
-                        <label>التوكن (API Key)</label>
-                        <div style="display:flex; gap:0.5rem;">
-                            <input type="text" id="profile-token" readonly style="background: rgba(0,0,0,0.02);">
-                            <button onclick="copyToken()" class="btn btn-outline" style="padding:0.75rem;">نسخ</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Sessions/Admin Tab -->
-        <div id="tab-settings" class="tab-content" style="display:none;">
-            <div class="card">
-                <h3>إدارة الجلسات والحسابات</h3>
-                <p class="small" style="margin-bottom: 1.5rem;">يمكن للمسؤول التحكم في حدود الرسائل وإدارة الحسابات النشطة</p>
-                
-                <div class="table-container">
-                    <table id="admin-table">
-                        <thead>
-                            <tr>
-                                <th>المستخدم</th>
-                                <th>الاتصال (جوال/إيميل)</th>
-                                <th>الرسائل (مرسل/محدد)</th>
-                                <th>الحالة</th>
-                                <th>إجراءات</th>
-                            </tr>
-                        </thead>
-                        <tbody id="admin-users-body">
-                            <!-- User rows will be injected here -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-    </div>
-
-    <script>
-        // Tab Logic
-        const tabs = document.querySelectorAll('.nav-tab');
-        const contents = document.querySelectorAll('.tab-content');
-
-        tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                tabs.forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                
-                const target = tab.getAttribute('data-tab');
-                contents.forEach(c => {
-                    c.style.display = c.id === `tab-${target}` ? 'block' : 'none';
-                });
-            });
-        });
-
-        // App Logic
-        let userToken = "";
-        
-        // Initial setup - get current user from session via API or inject via server
-        // For now, assume we'll use a fetch to get status
-        async function init() {
-            try {
-                const res = await fetch('/api/me');
-                if (!res.ok) {
-                    window.location.href = '/login';
-                    return;
-                }
-                const data = await res.json();
-                userToken = data.token;
-                document.getElementById('user-display').textContent = data.username;
-                document.getElementById('my-token-display').textContent = data.token.slice(0, 10) + '...';
-                
-                // Load Profile Data
-                document.getElementById('profile-username').value = data.username;
-                document.getElementById('profile-phone').value = data.phone || "";
-                document.getElementById('profile-email').value = data.email || "";
-                document.getElementById('profile-token').value = data.token;
-                
-                // Admin check
-                if (data.isAdmin) {
-                    document.getElementById('admin-tab-btn').style.display = 'block';
-                }
-
-                startSSE(userToken);
-                refreshFullStatus();
-                setInterval(refreshFullStatus, 30000);
-            } catch (e) {
-                console.error("Init failed", e);
-                window.location.href = '/login';
-            }
-        }
-
-        async function reconnect() {
-            if (!userToken) return;
-            addLog("جاري محاولة إعادة الاتصال...", "info");
-            fetch(`/ensure-start/${userToken}`).then(() => refreshFullStatus());
-        }
-
-        async function resetSession() {
-            if (!confirm("سيتم مسح بيانات الجلسة الحالية وإنشاء كود QR جديد. هل أنت متأكد؟")) return;
-            addLog("جاري مسح الجلسة والبدء من جديد...", "warn");
-            
-            const res = await fetch('/api/session/reset', { method: 'POST' });
-            if (res.ok) {
-                addLog("تم إعادة ضبط الجلسة بنجاح", "ok");
-                refreshFullStatus();
-            }
-        }
-
-        let lastChatJid = "";
-
-        async function refreshFullStatus() {
-            if (!userToken) return;
-            try {
-                const res = await fetch(`/api/status-full/${userToken}`);
-                const data = await res.json();
-                updateUIStatus(data);
-                
-                document.getElementById('count-sent').textContent = data.sentCount || 0;
-                document.getElementById('count-received').textContent = data.receivedCount || 0;
-                
-                // Update Automation fields if empty
-                if (!document.getElementById('webhook-url').value && data.webhookUrl) {
-                    document.getElementById('webhook-url').value = data.webhookUrl;
-                }
-                if (!document.getElementById('auto-reply-text').value && data.autoReplyText) {
-                    document.getElementById('auto-reply-text').value = data.autoReplyText;
-                    document.getElementById('auto-reply-toggle').checked = !!data.autoReplyEnabled;
-                }
-
-                renderChat(data.msgs);
-
-                // If admin tab is active, refresh it too
-                if (document.getElementById('tab-settings').style.display !== 'none') {
-                    refreshAdminTable();
-                }
-            } catch (e) {
-                console.error("Status refresh failed", e);
-            }
-        }
-
-        async function refreshAdminTable() {
-            try {
-                const res = await fetch('/api/admin/users');
-                const users = await res.json();
-                const body = document.getElementById('admin-users-body');
-                
-                body.innerHTML = users.map(u => `
-                    <tr>
-                        <td><b>${u.username}</b></td>
-                        <td class="small">
-                            <div>${u.phone}</div>
-                            <div style="opacity:0.6">${u.email}</div>
-                        </td>
-                        <td>
-                            <div style="display:flex; align-items:center; gap:10px;">
-                                <span>${u.count} / ${u.limit === -1 ? '∞' : u.limit}</span>
-                                <button onclick="promptUpdateLimit('${u.token}', ${u.limit})" class="btn btn-outline" style="padding: 2px 8px; font-size: 0.7rem;">تعديل</button>
-                            </div>
-                        </td>
-                        <td><span class="badge ${u.state === 'open' ? 'badge-success' : 'badge-warning'}">${u.state}</span></td>
-                        <td>
-                            <button onclick="deleteUser('${u.token}')" class="btn btn-outline" style="color:var(--danger); border-color:var(--danger); padding: 2px 8px; font-size: 0.7rem;">حذف</button>
-                        </td>
-                    </tr>
-                `).join('');
-            } catch (e) { console.error(e); }
-        }
-
-        async function promptUpdateLimit(token, current) {
-            const val = prompt("أدخل الحد الجديد (استخدم -1 ليكون غير محدود):", current);
-            if (val === null) return;
-            
-            const res = await fetch('/admin/update-limit', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token, newLimit: val })
-            });
-            if (res.ok) refreshAdminTable();
-        }
-
-        async function deleteUser(token) {
-            if (!confirm("هل أنت متأكد من حذف هذا الحساب نهائياً؟")) return;
-            const res = await fetch('/admin/delete-user', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token })
-            });
-            if (res.ok) refreshAdminTable();
-        }
-
-        function renderChat(msgs) {
-            const container = document.getElementById('chat-messages');
-            if (!msgs || msgs.length === 0) return;
-
-            container.innerHTML = msgs.map(m => {
-                const isStatus = !m.from;
-                const time = new Date(m.ts).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                const displayFrom = m.from ? m.from.split('@')[0] : 'System';
-                
-                return `
-                    <div style="align-self: flex-start; max-width: 80%; cursor: pointer;" onclick="prepareReply('${m.from}')">
-                        <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 2px; margin-right: 10px;">
-                            ${displayFrom} • ${time}
-                        </div>
-                        <div style="background: white; padding: 0.75rem 1rem; border-radius: 0 1rem 1rem 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid var(--border);">
-                            ${m.text}
-                        </div>
-                    </div>
-                `;
-            }).join('');
-            
-            container.scrollTop = container.scrollHeight;
-        }
-
-        function prepareReply(jid) {
-            if (!jid || jid === 'undefined') return;
-            lastChatJid = jid;
-            document.getElementById('reply-target-info').style.display = 'block';
-            document.getElementById('reply-jid').textContent = jid.split('@')[0];
-            document.getElementById('reply-input').disabled = false;
-            document.getElementById('btn-reply').disabled = false;
-            document.getElementById('reply-input').focus();
-            document.getElementById('chat-active-badge').textContent = `دردشة مع: ${jid.split('@')[0]}`;
-        }
-
-        document.getElementById('reply-form').onsubmit = async (e) => {
-            e.preventDefault();
-            const input = document.getElementById('reply-input');
-            const text = input.value;
-            if (!text || !lastChatJid) return;
-
-            const btn = document.getElementById('btn-reply');
-            btn.disabled = true;
-            
-            try {
-                const res = await fetch('/send-text', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token: userToken, chatId: lastChatJid, text })
-                });
-                
-                if (res.ok) {
-                    addLog(`تم إرسال الرد إلى ${lastChatJid.split('@')[0]}`, 'ok');
-                    input.value = "";
-                    refreshFullStatus();
-                } else {
-                    const data = await res.json();
-                    addLog(`فشل الرد: ${data.error}`, 'error');
-                }
-            } catch (e) {
-                addLog("خطأ في الاتصال بالسيرفر", "error");
-            } finally {
-                btn.disabled = false;
-            }
-        };
-
-        function startSSE(token) {
-            if (!token) return;
-            const es = new EventSource(`/pair-stream/${token}`);
-            
-            es.onmessage = (ev) => {
-                const p = JSON.parse(ev.data);
-                if (p.type === 'log') {
-                    addLog(p.msg, p.level);
-                } else if (p.type === 'msg' || p.type === 'open' || p.type === 'close') {
-                    refreshFullStatus();
-                } else if (p.type === 'qr') {
-                    updateUIStatus(p);
-                }
-            };
-            
-            es.onerror = () => {
-                addLog("انقطع اتصال الـ SSE، جاري إعادة المحاولة...", "warn");
-            };
-        }
-
-        function addLog(msg, level = 'info') {
-            const container = document.getElementById('log-container');
-            if (!container) return;
-            const div = document.createElement('div');
-            div.className = `log-entry log-${level}`;
-            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-            container.prepend(div);
-            if (container.childNodes.length > 100) container.removeChild(container.lastChild);
-        }
-
-        function updateUIStatus(p) {
-            const statusText = document.getElementById('status-text');
-            const spinner = document.getElementById('status-spinner');
-            const qrWrap = document.getElementById('qr-wrap');
-            const connectedActions = document.getElementById('connected-actions');
-            const waInfo = document.getElementById('wa-info');
-            
-            if (p.state === 'open') {
-                statusText.textContent = "متصل بنجاح";
-                spinner.style.background = "var(--success)";
-                qrWrap.style.display = "none";
-                connectedActions.style.display = "block";
-                waInfo.textContent = `${p.waName || ''} (${p.waId || ''})`;
-            } else if (p.qrDataUrl) {
-                statusText.textContent = "بانتظار مسح كود QR";
-                spinner.style.background = "var(--warning)";
-                qrWrap.style.display = "block";
-                document.getElementById('qr-image').src = p.qrDataUrl;
-                connectedActions.style.display = "none";
-                waInfo.textContent = "";
-            } else {
-                statusText.textContent = "جاري الاتصال...";
-                spinner.style.background = "var(--warning)";
-            }
-        }
-
-        // Send logic
-        document.getElementById('send-form').onsubmit = async (e) => {
-            e.preventDefault();
-            const btn = document.getElementById('btn-send-test');
-            const result = document.getElementById('send-result');
-            
-            const to = document.getElementById('send-to').value;
-            const text = document.getElementById('send-msg').value;
-            
-            btn.disabled = true;
-            btn.textContent = "جاري الإرسال...";
-            
-            try {
-                const res = await fetch('/send-text', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token: userToken, chatId: `${to}@s.whatsapp.net`, text })
-                });
-                const data = await res.json();
-                
-                if (res.ok) {
-                    result.innerHTML = `<div class="badge badge-success">تم الإرسال بنجاح! ID: ${data.sent?.key?.id || 'OK'}</div>`;
-                    document.getElementById('send-msg').value = "";
-                } else {
-                    result.innerHTML = `<div class="badge badge-danger">خطأ: ${data.error || 'فشل الإرسال'}</div>`;
-                }
-            } catch (e) {
-                result.innerHTML = `<div class="badge badge-danger">خطأ في الاتصال بالسيرفر</div>`;
-            } finally {
-                btn.disabled = false;
-                btn.textContent = "إرسال الآن";
-            }
-        };
-
-        // Bootstrap
-        window.onload = init;
-    </script>
+<html lang="ar">
+<head><meta charset="UTF-8"><title>تسجيل الدخول</title></head>
+<body style="text-align:center">
+  <h2>🔐 تسجيل الدخول</h2>
+  <form method="POST" action="/login">
+    <input type="text" name="username" placeholder="اسم المستخدم" required /><br><br>
+    <input type="password" name="password" placeholder="كلمة المرور" required /><br><br>
+    <button type="submit">دخول</button>
+  </form>
 </body>
 </html>

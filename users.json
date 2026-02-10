@@ -1,26 +1,23 @@
 {
+  "12b3a2356d0145ab274e81a47837d49e": {
+    "username": "kamal",
+    "password": "Aa102030147",
+    "token": "12b3a2356d0145ab274e81a47837d49e",
+    "sessionPath": "./sessions/12b3a2356d0145ab274e81a47837d49e",
+    "count": 10
+  },
+  "46785a154d063cec4621a195ccf306bc": {
+    "username": "ajnec",
+    "password": "Aa40504640972",
+    "token": "46785a154d063cec4621a195ccf306bc",
+    "sessionPath": "./sessions/46785a154d063cec4621a195ccf306bc",
+    "count": 5
+  },
   "AjnecAjaneddAPiKey": {
     "username": "ajnec",
     "password": "Aa40504640972",
     "token": "AjnecAjaneddAPiKey",
     "sessionPath": "./sessions/AjnecAjaneddAPiKey",
-    "count": 0,
-    "lastDisconnectCode": 401,
-    "lastDisconnectAt": "2026-01-10T16:35:46.215Z",
-    "waId": "972512865116:31@s.whatsapp.net",
-    "waName": "esim",
-    "lastError": "Connection Failure"
-  },
-  "1f0899de82b3bdd26a4788fcb080da64": {
-    "username": "kamal",
-    "password": "Aa102030147",
-    "token": "1f0899de82b3bdd26a4788fcb080da64",
-    "sessionPath": "/home/ajneccom/send.ajnec.com/sessions/1f0899de82b3bdd26a4788fcb080da64",
-    "count": 0,
-    "waId": "972512865116:32@s.whatsapp.net",
-    "waName": "esim",
-    "lastDisconnectCode": 440,
-    "lastDisconnectAt": "2026-01-10T10:48:16.638Z",
-    "lastError": "Stream Errored (conflict) — توجد جلسة/اتصال آخر يستخدم نفس credentials. أوقف كل النسخ الأخرى (instances=1) أو احذف مجلد session وأعد الربط."
+    "count": 2
   }
 }
