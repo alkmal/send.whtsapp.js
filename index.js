@@ -216,7 +216,7 @@ app.post("/send-text", async (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 80;
 app.listen(PORT, () => {
     console.log(`🚀 الخادم يعمل على http://localhost:${PORT}`);
 });
